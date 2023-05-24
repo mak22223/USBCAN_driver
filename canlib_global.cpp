@@ -7,12 +7,18 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, // handle to DLL module
   DWORD fdwReason,    // reason for calling function
   LPVOID lpvReserved) // reserved
 {
+
+
   // Perform actions based on the reason for calling.
   switch (fdwReason) {
   case DLL_PROCESS_ATTACH:
     std::cout << "DLL_PROCESS_ATTACH" << std::endl;
     // Initialize once for each new process.
     // Return FALSE to fail DLL load.
+
+    if(PassThru::initPassThruInterface()) {
+      std::cout << "Initialized PassThruInterface." << std::endl;
+    }
     break;
 
   case DLL_THREAD_ATTACH:
@@ -48,7 +54,7 @@ extern "C" CANLIB_EXPORT long WINAPI PassThruOpen(
 
 extern "C" CANLIB_EXPORT long WINAPI PassThruClose(unsigned long DeviceID)
 {
-
+  return PassThru::getInstance().close(DeviceID);
 }
 
 extern "C" CANLIB_EXPORT long WINAPI PassThruConnect(

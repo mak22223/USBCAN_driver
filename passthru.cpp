@@ -36,19 +36,26 @@ PassThru& PassThru::getInstance()
 
 long PassThru::open(void*, unsigned long *pDeviceID)
 {
-  // if (!d_driver.open()) {
-  //   return ERR_DEVICE_NOT_CONNECTED;
-  // }
+  if (pDeviceID == nullptr) {
+    return ERR_NULL_PARAMETER;
+  }
 
-  return STATUS_NOERROR;
+  ulong status = d_driver.open();
+  *pDeviceID = 0;
+  
+  return status;
 }
 
-long close(ulong DeviceID)
+long PassThru::close(ulong DeviceID)
 {
+  if (DeviceID != 0) {
+    return ERR_INVALID_DEVICE_ID;
+  }
 
+  return d_driver.close();
 }
 
-long connect(
+long PassThru::connect(
   ulong DeviceID,
   ulong ProtocolID,
   ulong Flags,
@@ -58,12 +65,12 @@ long connect(
 
 }
 
-long disconnect(ulong ChannelID)
+long PassThru::disconnect(ulong ChannelID)
 {
 
 }
 
-long readMsgs(
+long PassThru::readMsgs(
   ulong ChannelID,
   PassThruMsg *pMsg,
   ulong *pNumMsgs,
@@ -72,7 +79,7 @@ long readMsgs(
 
 }
 
-long writeMsgs(
+long PassThru::writeMsgs(
   ulong ChannelID,
   PassThruMsg *pMsg,
   ulong *pNumMsgs,
@@ -81,7 +88,7 @@ long writeMsgs(
 
 }
 
-long startPeriodicMsg(
+long PassThru::startPeriodicMsg(
   ulong ChannelID,
   PassThruMsg *pMsg,
   ulong *pMsgID,
@@ -90,14 +97,14 @@ long startPeriodicMsg(
 
 }
 
-long stopPeriodicMsg(
+long PassThru::stopPeriodicMsg(
   ulong ChannelID,
   ulong MsgID)
 {
 
 }
 
-long startMsgFilter(
+long PassThru::startMsgFilter(
   ulong ChannelID,
   ulong FilterType,
   PassThruMsg *pMaskMsg,
@@ -108,14 +115,14 @@ long startMsgFilter(
 
 }
 
-long stopMsgFilter(
+long PassThru::stopMsgFilter(
   ulong ChannelID,
   ulong FilterID)
 {
 
 }
 
-long setProgrammingVoltage(
+long PassThru::setProgrammingVoltage(
   ulong DeviceID,
   ulong PinNumber,
   ulong Voltage)
@@ -123,7 +130,7 @@ long setProgrammingVoltage(
 
 }
 
-long readVersion(
+long PassThru::readVersion(
   ulong DeviceID,
   char *pFirmwareVersion,
   char *pDllVersion,
@@ -132,12 +139,12 @@ long readVersion(
 
 }
 
-long getLastError(char *pErrorDescription)
+long PassThru::getLastError(char *pErrorDescription)
 {
 
 }
 
-long ioctl(
+long PassThru::ioctl(
   ulong ChannelID,
   ulong IoctlID,
   void *pInput,

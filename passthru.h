@@ -6,7 +6,7 @@
 #include "driver.h"
 
 #include <map>
-#include <vector>
+#include <memory>
 
 using ulong = unsigned long;
 
@@ -74,19 +74,11 @@ protected:
   PassThru();
 
 protected:
-  struct Channel {
-    std::vector<PassThruMsg> recMsgs;
-    std::vector<PassThruMsg> sentMsgs;
-    std::vector<PassThruMsg> passFilters;
-    std::vector<PassThruMsg> blockFilters;
-    std::vector<PassThruMsg> flowControlFilters;
-  };
-
   static PassThru *instance;
 
   Driver d_driver;
   bool d_deviceOpened;
-  std::map<ulong, Channel> d_channels;
+  std::map<ulong, std::shared_ptr<Driver>> d_channels;
   // массив активных устройств
   // map устройство - логический канал
   // буферы для полученных сообщений
