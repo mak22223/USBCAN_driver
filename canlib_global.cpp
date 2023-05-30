@@ -154,5 +154,5 @@ extern "C" long CANLIB_EXPORT WINAPI PassThruIoctl(
   void *pInput,
   void *pOutput)
 {
-  
+  return PassThru::getInstance().ioctl(ChannelID, IoctlID, pInput, pOutput);
 }

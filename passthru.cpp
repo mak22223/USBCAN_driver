@@ -150,5 +150,9 @@ long PassThru::ioctl(
   void *pInput,
   void *pOutput)
 {
+  if (pOutput == nullptr) {
+    return ERR_NULL_PARAMETER;
+  }
 
+  return d_driver.ioctl(ChannelID, IoctlID, pInput, pOutput);
 }

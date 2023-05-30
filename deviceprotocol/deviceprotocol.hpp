@@ -4,6 +4,11 @@
 
 constexpr char ControlChar = 0x5U;
 
+enum class DeviceInterface : uint8_t {
+  HS_CAN = 0,
+  MS_CAN,
+};
+
 struct DeviceCommand
 {
   enum Id {
@@ -12,9 +17,10 @@ struct DeviceCommand
     ITF_INIT,
     ITF_CONFIG,
     ITF_DEINIT,
-    MSG_SEND,
+    MSG_SEND8,
     FLTR_SET,
     FLTR_UNSET,
+    READ_VBATT,
   };
 
   char id;
@@ -29,35 +35,42 @@ struct DeviceCommand
     } reset;
 
     struct {
-      uint8_t type;
+      DeviceInterface itf;
       uint16_t flags;
       uint32_t speed;
     } itfInit;
       
     struct {
-      uint8_t type;
+      DeviceInterface itf;
       uint8_t paramType;
       uint32_t data;
     } itfConfig;
 
     struct {
-      uint8_t type;
+      DeviceInterface itf;
     } itfDeinit;
 
     struct {
-      uint8_t type;
+      DeviceInterface itf;
       uint16_t flags;
       uint16_t len;
       char data[8];
     } msgSend8;
 
     struct {
-
+      DeviceInterface itf;
+      uint32_t filter;
+      uint32_t mask;
     } fltrSet;
 
     struct {
-
+      DeviceInterface itf;
+      uint8_t id;
     } fltrUnset;
+
+    struct {
+
+    } readVBatt;
   } arg;
 };
 
@@ -71,9 +84,11 @@ struct DeviceAnswer
     ITF_INIT,
     ITF_CONFIG,
     ITF_DEINIT,
-    MSG_RECV,
+    MSG_RECV8,
+    MSG_SEND,
     FLTR_SET,
     FLTR_UNSET,
+    READ_VBATT,
   };
 
   char id;
@@ -87,5 +102,44 @@ struct DeviceAnswer
     struct {
 
     } reset;
+
+    struct {
+      DeviceInterface itf;
+      uint16_t code;
+    } error;
+
+    struct {
+      // replaced with 'error'
+    } itfInit;
+
+    struct {
+      // replaced with 'error'
+    } itfConfig;
+
+    struct {
+      DeviceInterface itf;
+      uint16_t flags;
+      uint8_t length;
+      uint8_t data[8];
+    } msgRecv8;
+    
+    struct {
+      DeviceInterface itf;
+      uint32_t id;
+      uint32_t timestamp;
+    } msgSend;
+
+    struct {
+      DeviceInterface itf;
+      uint8_t id;
+    } fltrSet;
+
+    struct {
+      // replaced with 'error'
+    } fltrUnset;
+
+    struct {
+      uint16_t millivolts;
+    } readVBatt;
   } arg;
 };

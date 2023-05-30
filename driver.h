@@ -8,6 +8,7 @@
 #include "circularbuffer.hpp"
 
 #include <QtSerialPort/QSerialPort>
+#include <mutex>
 #include <queue>
 #include <thread>
 #include <vector>
@@ -21,20 +22,71 @@ struct Channel {
   std::vector<PassThruMsg> blockFilters;
   std::vector<PassThruMsg> flowControlFilters;
   /// циклические сообщения
+  /// id установленных фильтров
 };
 
 struct ThreadCommand
 {
-  enum {
-    INTERFACE_INIT = 0x00,
-    INTERFACE_CFG = 0x01,
-    INTERFACE_DEINIT = 0x02
-  } cmdId;
+  enum Id {
+    DEFAULT,
+    INTERFACE_INIT = 0x01U,
+    INTERFACE_CFG = 0x02U,
+    INTERFACE_DEINIT = 0x03U,
+    FLTR_SET = 0x04U,
+    FLTR_UNSET = 0x05U,
+    READ_VBATT = 0x06U
+  };
+
+  enum Status {
+    PENDING = 0U,
+    EXECUTING = 1U,
+    DONE = 2U,
+  };
+
+  enum ReturnCode {
+    OK = 0U,
+    ERROR
+  };
+
+  Id id = Id::DEFAULT;
+  Status status = Status::PENDING;
 
   union
   {
-    /* data */
+    struct {
+
+    } itfInit;
+
+    struct {
+
+    } itfCfg;
+
+    struct {
+      uint8_t itfType;
+    } itfDeinit;
+
+    struct {
+
+    } fltrSet;
+
+    struct {
+
+    } fltrUnset;
   } arg;
+
+  uint32_t returnCode;
+  union
+  {
+    struct
+    {
+      
+    } fltrSet;
+
+    struct
+    {
+      uint32_t millivolts;
+    } readVBatt;
+  } result;
   
 };
 
@@ -89,12 +141,12 @@ public:
     void *pInput,
     void *pOutput);
 
-  bool isOpen() const;  
-
 protected:
   void thread(std::stop_token stopToken);
+  bool prepareCommand(const ThreadCommand &req, DeviceCommand &cmd);
   bool sendCommand(const DeviceCommand &cmd);
   bool receiveAnswer(DeviceAnswer &ans);
+  bool handleErrorCode(const DeviceAnswer &ans);
 
 protected:
   std::jthread d_devThread;
@@ -107,6 +159,7 @@ protected:
 
   std::vector<Channel> channels;
   std::queue<ThreadCommand> commands;
+  std::mutex commandQueueMutex;
 
 
   
