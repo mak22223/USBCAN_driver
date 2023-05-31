@@ -91,6 +91,10 @@ struct DeviceAnswer
     READ_VBATT,
   };
 
+  enum ErrorCode {
+    RESET_OK = 1,
+  };
+
   char id;
 
   union {
@@ -105,7 +109,7 @@ struct DeviceAnswer
 
     struct {
       DeviceInterface itf;
-      uint16_t code;
+      ErrorCode code;
     } error;
 
     struct {

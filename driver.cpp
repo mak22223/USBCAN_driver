@@ -17,8 +17,7 @@ constexpr quint16 ProductId = 0x5741;
 constexpr qint32 Baudrate = 1'000'000UL;
 
 Driver::Driver()
-: d_deviceOpened(false),
-  d_port(QSerialPort())
+: d_deviceOpen(false)
 {
 
 }
@@ -32,6 +31,48 @@ void Driver::thread(std::stop_token stopToken)
 {
   // инициализация потока
   bool errorOccurred = false;
+  QSerialPort port;
+
+  {
+    qDebug() << "Searching for device.\n";
+    bool deviceFound = false;
+    const auto serialPorts = QSerialPortInfo::availablePorts();
+    for (const auto &portInfo : serialPorts) {
+      // qDebug() << "\n"
+      //              << "Port:" << portInfo.portName() << "\n"
+      //              << "Location:" << portInfo.systemLocation() << "\n"
+      //              << "Description:" << portInfo.description() << "\n"
+      //              << "Manufacturer:" << portInfo.manufacturer() << "\n"
+      //              << "Serial number:" << portInfo.serialNumber() << "\n"
+      //              << "Vendor Identifier:"
+      //              << (portInfo.hasVendorIdentifier()
+      //                  ? QByteArray::number(portInfo.vendorIdentifier(), 16)
+      //                  : QByteArray()) << "\n"
+      //              << "Product Identifier:"
+      //              << (portInfo.hasProductIdentifier()
+      //                  ? QByteArray::number(portInfo.productIdentifier(), 16)
+      //                  : QByteArray());
+
+      if (portInfo.hasProductIdentifier() && portInfo.productIdentifier() == ProductId) {
+        deviceFound = true;
+        port.setPort(portInfo);
+        port.setBaudRate(Baudrate);
+        break;
+      }
+    }
+
+    if (!deviceFound) {
+      /// set error description
+      qDebug() << "Device not found.\n";
+      errorOccurred = true;
+    } else {
+      if (!port.open(QIODeviceBase::ReadWrite)) {
+        /// set error description
+        qDebug() << "Device is already in use.\n";
+        errorOccurred = true;
+      }
+    }
+  }
 
   while (!stopToken.stop_requested() && !errorOccurred) {
     /// проверка очереди команд на исполнение
@@ -51,15 +92,13 @@ void Driver::thread(std::stop_token stopToken)
             errorOccurred = true;
           }
           /// проверить результат отправки команды
-          sendCommand(cmd);
+          sendCommand(port, cmd);
         }
       }
     }
 
-    /// возможно нужно вызывать waitForReadyRead()
-
     /// проверка отсутствия ошибок порта
-    QSerialPort::SerialPortError error = d_port.error();
+    QSerialPort::SerialPortError error = port.error();
     if (error != QSerialPort::NoError) {
       /// handle port error
       qDebug() << "Port has error: " << error;
@@ -70,12 +109,13 @@ void Driver::thread(std::stop_token stopToken)
 
     /// проверка наличия сообщений в буфере отправки и отправка их
 
-    if (!d_port.waitForBytesWritten(0) || !d_port.waitForReadyRead(0)) {
-      d_port.clearError();
+    /// возможно нужно вызывать waitForReadyRead()
+    if (!port.waitForBytesWritten(0) || !port.waitForReadyRead(0)) {
+      port.clearError();
     }
 
     DeviceAnswer ans;
-    if (receiveAnswer(ans)) {
+    if (receiveAnswer(port, ans)) {
 
       qDebug() << "Received answer with id: " << ans.id;
       std::unique_lock lock(commandQueueMutex, std::defer_lock);
@@ -128,89 +168,73 @@ void Driver::thread(std::stop_token stopToken)
   }
 
   // деинициализация потока
-  d_port.close();
+  /// ошибка во время исполнения команды не завершит команду и повесит запрашивающий поток
+  port.close();
 }
 
 /*           PassThru interface section             */
 
 int Driver::open()
 {
-  if (d_deviceOpened) {
+  using namespace std::chrono_literals;
+
+  if (d_deviceOpen) {
     /// set error description
-    qDebug() << "Device is already opened.\n";
+    qDebug() << "Device is already open.\n";
     return ERR_DEVICE_IN_USE;
   }
 
-  qDebug() << "Searching for device.\n";
-  bool deviceFound = false;
-  const auto serialPorts = QSerialPortInfo::availablePorts();
-  for (const auto &port : serialPorts) {
-    // qDebug() << "\n"
-    //              << "Port:" << port.portName() << "\n"
-    //              << "Location:" << port.systemLocation() << "\n"
-    //              << "Description:" << port.description() << "\n"
-    //              << "Manufacturer:" << port.manufacturer() << "\n"
-    //              << "Serial number:" << port.serialNumber() << "\n"
-    //              << "Vendor Identifier:"
-    //              << (port.hasVendorIdentifier()
-    //                  ? QByteArray::number(port.vendorIdentifier(), 16)
-    //                  : QByteArray()) << "\n"
-    //              << "Product Identifier:"
-    //              << (port.hasProductIdentifier()
-    //                  ? QByteArray::number(port.productIdentifier(), 16)
-    //                  : QByteArray());
+  d_devThread = std::jthread(std::bind_front(&Driver::thread, this));
 
-    if (port.hasProductIdentifier() && port.productIdentifier() == ProductId) {
-      deviceFound = true;
-      d_port.setPort(port);
-      break;
-    }
-  }
+  // Init device
+  QTimer timeout;
+  timeout.setTimerType(Qt::CoarseTimer);
+  timeout.setSingleShot(true);
+  std::unique_lock lock(commandQueueMutex, std::defer_lock);
+  ThreadCommand resetCmd;
+  resetCmd.id = ThreadCommand::Id::RESET;
+  lock.lock();
+  commands.push(resetCmd);
+  lock.unlock();
 
-  if (!deviceFound) {
+  timeout.start(200ms);
+  while (commands.front().status != ThreadCommand::Status::DONE && timeout.isActive());
+
+  if (commands.front().status != ThreadCommand::Status::DONE || commands.front().returnCode != ThreadCommand::ReturnCode::OK) {
     /// set error description
-    qDebug() << "Device not found.\n";
-    return ERR_DEVICE_NOT_CONNECTED;
-  }
-
-  d_port.setBaudRate(Baudrate);
-  if (!d_port.open(QIODeviceBase::ReadWrite)) {
-    /// set error description
-    qDebug() << "Device is already in use.\n";
-    return ERR_DEVICE_IN_USE;
-  }
-
-
-  /// RESET DEVICE BEFORE INFO REQUEST AND RESET INPUT BUFFER
-  DeviceCommand infoRequest;
-  DeviceAnswer infoAnswer;
-  infoRequest.id = DeviceCommand::INFO;
-  infoAnswer.id = DeviceAnswer::DEFAULT;
-
-  if (!sendCommand(infoRequest)) {
-    /// set error description
-    qDebug() << "Failed to send initial info command.";
-    d_port.close();
+    /// clear command queue, stop thread
+    qDebug() << "Failed to reset device.";
     return ERR_FAILED;
   }
 
-  d_port.waitForReadyRead(200);
-  if (!receiveAnswer(infoAnswer)) {
-    qDebug() << "Failed to receive device answer.";
-    d_port.close();
+  lock.lock();
+  commands.pop();
+  lock.unlock();
+
+  ThreadCommand infoCmd;
+  infoCmd.id = ThreadCommand::Id::INFO;
+  lock.lock();
+  commands.push(infoCmd);
+  lock.unlock();
+
+  timeout.start(200ms);
+  while (commands.front().status != ThreadCommand::Status::DONE && timeout.isActive());
+
+  if (commands.front().status != ThreadCommand::Status::DONE || commands.front().returnCode != ThreadCommand::ReturnCode::OK) {
+    /// set error description
+    /// clear command queue, stop thread
+    qDebug() << "Failed to get device info.";
     return ERR_FAILED;
   }
 
-  if (infoAnswer.id != DeviceAnswer::INFO) {
-    qDebug() << "Failed to request device info.";
-    d_port.close();
-    return ERR_FAILED;
-  }
+  infoCmd = commands.front();
+  lock.lock();
+  commands.push(infoCmd);
+  lock.unlock();
 
   /// Fill device info string
 
-  d_deviceOpened = true;
-  d_devThread = std::jthread(std::bind_front(&Driver::thread, this));
+  d_deviceOpen = true;
 
   qDebug() << "Successfully opened device and started thread.";
   return STATUS_NOERROR;
@@ -222,8 +246,7 @@ int Driver::close()
     d_devThread.request_stop();
     d_devThread.join();
   }
-  d_deviceOpened = false;
-  d_port.close();
+  d_deviceOpen = false;
 
   /// очистка буферов и прочего
 
@@ -314,8 +337,8 @@ long Driver::ioctl(
   case PassThruIoctlId::READ_VBATT:
     /// check for valid deviceid
 
-    lock.lock();
     cmd.id = ThreadCommand::Id::READ_VBATT;
+    lock.lock();
     commands.push(cmd);
     lock.unlock();
     break;
@@ -359,12 +382,17 @@ long Driver::ioctl(
 
 /*            Private functions section            */
 
-bool Driver::sendCommand(const DeviceCommand &cmd)
+bool Driver::sendCommand(QSerialPort &port, const DeviceCommand &cmd)
 {
   std::string sendBuf;
   switch (cmd.id)
   {
   case DeviceCommand::Id::INFO:
+    sendBuf.resize(1 + 1);
+    sendBuf[0] = cmd.id;
+    break;
+
+  case DeviceCommand::Id::RESET:
     sendBuf.resize(1 + 1);
     sendBuf[0] = cmd.id;
     break;
@@ -382,7 +410,7 @@ bool Driver::sendCommand(const DeviceCommand &cmd)
   
   sendBuf[sendBuf.size() - 1] = ControlChar;
 
-  if (d_port.write(sendBuf.c_str(), sendBuf.size()) <= 0 || !d_port.waitForBytesWritten(5)) {
+  if (port.write(sendBuf.c_str(), sendBuf.size()) <= 0 || !port.waitForBytesWritten(5)) {
     /// set error description
     qDebug() << "Failed to write command to port.";
     return false;
@@ -391,15 +419,18 @@ bool Driver::sendCommand(const DeviceCommand &cmd)
   return true;
 }
 
-bool Driver::receiveAnswer(DeviceAnswer &ans)
+bool Driver::receiveAnswer(QSerialPort &port, DeviceAnswer &ans)
 {
-  size_t bytes = d_port.bytesAvailable();
+  if (!port.waitForReadyRead(0) && port.error() == QSerialPort::TimeoutError) {
+    port.clearError();
+  }
+  size_t bytes = port.bytesAvailable();
   if (bytes == 0) {
     return false;
   }
 
   std::unique_ptr<char[]> buf(new char[bytes]);
-  d_port.read(buf.get(), bytes);
+  port.read(buf.get(), bytes);
   if (!d_devBuf.put(buf.get(), bytes)) {
     qDebug() << "Failed to put data in circular buffer. Data size - " << std::to_string(bytes);
     return false;
@@ -419,6 +450,11 @@ bool Driver::receiveAnswer(DeviceAnswer &ans)
     d_devBuf.get(3, reinterpret_cast<char*>(&ans.arg.info.hwVer));
     d_devBuf.get(3, reinterpret_cast<char*>(&ans.arg.info.fwVer));
 
+    break;
+
+  case DeviceAnswer::Id::ERROR:
+    d_devBuf.get(1, reinterpret_cast<char*>(&ans.id));
+    d_devBuf.get(1, reinterpret_cast<char*>(&ans.arg.error.code));
     break;
 
   case DeviceAnswer::Id::READ_VBATT:
@@ -460,6 +496,14 @@ bool Driver::prepareCommand(const ThreadCommand &req, DeviceCommand &cmd)
   {
   case ThreadCommand::Id::READ_VBATT:
     cmd.id = DeviceCommand::Id::READ_VBATT;
+    break;
+
+  case ThreadCommand::Id::INFO:
+    cmd.id = DeviceCommand::Id::INFO;
+    break;
+
+  case ThreadCommand::Id::RESET:
+    cmd.id = DeviceCommand::Id::RESET;
     break;
   
   default:

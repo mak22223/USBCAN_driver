@@ -34,7 +34,9 @@ struct ThreadCommand
     INTERFACE_DEINIT = 0x03U,
     FLTR_SET = 0x04U,
     FLTR_UNSET = 0x05U,
-    READ_VBATT = 0x06U
+    READ_VBATT = 0x06U,
+    INFO = 0x07U,
+    RESET = 0x08U,
   };
 
   enum Status {
@@ -144,15 +146,14 @@ public:
 protected:
   void thread(std::stop_token stopToken);
   bool prepareCommand(const ThreadCommand &req, DeviceCommand &cmd);
-  bool sendCommand(const DeviceCommand &cmd);
-  bool receiveAnswer(DeviceAnswer &ans);
+  bool sendCommand(QSerialPort &port, const DeviceCommand &cmd);
+  bool receiveAnswer(QSerialPort &port, DeviceAnswer &ans);
   bool handleErrorCode(const DeviceAnswer &ans);
 
 protected:
   std::jthread d_devThread;
 
-  bool d_deviceOpened;
-  QSerialPort d_port;
+  bool d_deviceOpen;
   CircularBuffer<char, 4608> d_devBuf;
 
   std::string d_deviceInfo;
