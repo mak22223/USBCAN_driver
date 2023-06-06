@@ -81,6 +81,12 @@ struct ThreadCommand
   {
     struct
     {
+      char hwVer[3];
+      char fwVer[3];
+    } info;
+
+    struct
+    {
       
     } fltrSet;
 
@@ -148,7 +154,6 @@ protected:
   bool prepareCommand(const ThreadCommand &req, DeviceCommand &cmd);
   bool sendCommand(QSerialPort &port, const DeviceCommand &cmd);
   bool receiveAnswer(QSerialPort &port, DeviceAnswer &ans);
-  bool handleErrorCode(const DeviceAnswer &ans);
 
 protected:
   std::jthread d_devThread;

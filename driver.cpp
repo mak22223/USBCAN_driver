@@ -122,14 +122,24 @@ void Driver::thread(std::stop_token stopToken)
       switch (ans.id)
       {
       case DeviceAnswer::Id::INFO:
-        /* code */
+        if (commandOnExecution.id == ThreadCommand::Id::INFO) {
+          lock.lock();
+          assert(!commands.empty());
+          commands.front().returnCode = ThreadCommand::ReturnCode::OK;
+          for (int i = 0; i < 6; ++i) {
+            commands.front().result.info.hwVer[i] = ans.arg.info.hwVer[i];
+          }
+          commands.front().status = ThreadCommand::Status::DONE;
+          lock.unlock();
+          commandOnExecution = ThreadCommand();
+        } else {
+          /// received some answer while there was no request
+          qDebug() << "Received INFO answer while there was no request.";
+        }
         break;
 
       case DeviceAnswer::Id::ERROR:
-        if (!handleErrorCode(ans)) {
-          /// unexpected error code received
-          qDebug() << "Unexpected error code received: " << ans.arg.error.code;
-        }
+        
         break;
 
       case DeviceAnswer::Id::MSG_RECV8:
@@ -159,7 +169,21 @@ void Driver::thread(std::stop_token stopToken)
           qDebug() << "Received VBATT answer while there was no request.";
         }
         break;
-      
+
+      case DeviceAnswer::Id::RESET:
+        if (commandOnExecution.id == ThreadCommand::Id::RESET) {
+          lock.lock();
+          assert(!commands.empty());
+          commands.front().returnCode = ThreadCommand::ReturnCode::OK;
+          commands.front().status = ThreadCommand::Status::DONE;
+          lock.unlock();
+          commandOnExecution = ThreadCommand();
+        } else {
+          /// received some answer while there was no request
+          qDebug() << "Received RESET answer while there was no request.";
+        }
+        break;
+
       default:
         qDebug() << "Cannot handle DeviceAnswer with id: " << ans.id;
         break;
@@ -482,12 +506,6 @@ bool Driver::receiveAnswer(QSerialPort &port, DeviceAnswer &ans)
   }
 
   return true;
-}
-
-bool Driver::handleErrorCode(const DeviceAnswer &ans)
-{
-  /// implement method
-  return false;
 }
 
 bool Driver::prepareCommand(const ThreadCommand &req, DeviceCommand &cmd)
