@@ -21,7 +21,6 @@ Driver::Driver()
 {
 
 }
-
 Driver::~Driver()
 {
 
@@ -38,21 +37,6 @@ void Driver::thread(std::stop_token stopToken)
     bool deviceFound = false;
     const auto serialPorts = QSerialPortInfo::availablePorts();
     for (const auto &portInfo : serialPorts) {
-      // qDebug() << "\n"
-      //              << "Port:" << portInfo.portName() << "\n"
-      //              << "Location:" << portInfo.systemLocation() << "\n"
-      //              << "Description:" << portInfo.description() << "\n"
-      //              << "Manufacturer:" << portInfo.manufacturer() << "\n"
-      //              << "Serial number:" << portInfo.serialNumber() << "\n"
-      //              << "Vendor Identifier:"
-      //              << (portInfo.hasVendorIdentifier()
-      //                  ? QByteArray::number(portInfo.vendorIdentifier(), 16)
-      //                  : QByteArray()) << "\n"
-      //              << "Product Identifier:"
-      //              << (portInfo.hasProductIdentifier()
-      //                  ? QByteArray::number(portInfo.productIdentifier(), 16)
-      //                  : QByteArray());
-
       if (portInfo.hasProductIdentifier() && portInfo.productIdentifier() == ProductId) {
         deviceFound = true;
         port.setPort(portInfo);
@@ -62,12 +46,10 @@ void Driver::thread(std::stop_token stopToken)
     }
 
     if (!deviceFound) {
-      /// set error description
       qDebug() << "Device not found.\n";
       errorOccurred = true;
     } else {
       if (!port.open(QIODeviceBase::ReadWrite)) {
-        /// set error description
         qDebug() << "Device is already in use.\n";
         errorOccurred = true;
       }
@@ -75,7 +57,7 @@ void Driver::thread(std::stop_token stopToken)
   }
 
   while (!stopToken.stop_requested() && !errorOccurred) {
-    /// проверка очереди команд на исполнение
+    // проверка очереди команд на исполнение
     static ThreadCommand commandOnExecution;
     {
       std::unique_lock lock(commandQueueMutex, std::defer_lock);
@@ -84,7 +66,6 @@ void Driver::thread(std::stop_token stopToken)
           commands.front().status = ThreadCommand::Status::EXECUTING;
           commandOnExecution = commands.front();
 
-          /// нужно отправить команду
           DeviceCommand cmd;
           if (!prepareCommand(commandOnExecution, cmd)) {
             /// неверно задана команда или её аргументы
@@ -97,19 +78,14 @@ void Driver::thread(std::stop_token stopToken)
       }
     }
 
-    /// проверка отсутствия ошибок порта
+    // проверка отсутствия ошибок порта
     QSerialPort::SerialPortError error = port.error();
     if (error != QSerialPort::NoError) {
-      /// handle port error
       qDebug() << "Port has error: " << error;
-      /// method to close port, clear commands, filters and etc.
       errorOccurred = true;
       continue;
     }
 
-    /// проверка наличия сообщений в буфере отправки и отправка их
-
-    /// возможно нужно вызывать waitForReadyRead()
     if (!port.waitForBytesWritten(0) || !port.waitForReadyRead(0)) {
       port.clearError();
     }
