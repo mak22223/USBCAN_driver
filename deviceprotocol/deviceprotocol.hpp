@@ -108,8 +108,17 @@ struct DeviceAnswer
     } reset;
 
     struct {
-      DeviceInterface itf;
       ErrorCode code;
+      union {
+        struct {
+
+        } reset;
+
+        struct {
+          DeviceInterface itf;
+        } itfErr;
+
+      } errorPayload;
     } error;
 
     struct {

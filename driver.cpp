@@ -1,4 +1,3 @@
-
 #include "driver.h"
 
 #include "passthrudef.h"
@@ -93,8 +92,33 @@ void Driver::thread(std::stop_token stopToken)
     DeviceAnswer ans;
     if (receiveAnswer(port, ans)) {
 
-      qDebug() << "Received answer with id: " << ans.id;
+      qDebug() << "Received answer with id: " << int(ans.id);
+
       std::unique_lock lock(commandQueueMutex, std::defer_lock);
+
+      if (ans.id == DeviceAnswer::Id::ERROR) {
+        switch (ans.arg.error.code)
+        {
+        case DeviceAnswer::ErrorCode::RESET_OK:
+          if (commandOnExecution.id != ThreadCommand::Id::RESET) {
+            qDebug() << "Received RESET_OK error code while there was no request.";
+            break;
+          }
+
+          qDebug() << "Received RESET_OK error code.";
+          lock.lock();
+          assert(!commands.empty());
+          commands.front().returnCode = ThreadCommand::ReturnCode::OK;
+          commands.front().status = ThreadCommand::Status::DONE;
+          lock.unlock();
+          commandOnExecution = ThreadCommand();
+          break;
+        
+        default:
+          break;
+        }
+      }
+
       switch (ans.id)
       {
       case DeviceAnswer::Id::INFO:
@@ -229,7 +253,7 @@ int Driver::open()
 
   infoCmd = commands.front();
   lock.lock();
-  commands.push(infoCmd);
+  commands.pop();
   lock.unlock();
 
   /// Fill device info string
@@ -374,6 +398,7 @@ long Driver::ioctl(
   
   default:
     qDebug() << "Device thread executed unknown command.";
+    return ERR_FAILED;
     break;
   }
 

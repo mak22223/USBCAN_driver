@@ -4,6 +4,7 @@
 
 build_*
 .vscode
+CMakeLists.txt.user
 
 # Auto generated templates are below
 

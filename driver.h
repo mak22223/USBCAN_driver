@@ -167,9 +167,6 @@ protected:
   std::queue<ThreadCommand> commands;
   std::mutex commandQueueMutex;
 
-
-  
-
 };
 
 #endif // DRIVER_H
